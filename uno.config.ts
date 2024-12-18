@@ -232,15 +232,15 @@ export default defineConfig({
   presets: [
     presetUno({
       dark: {
-        light: '[data-theme="light"]',
-        dark: '[data-theme="dark"]',
+        selector: '[data-theme="dark"]',
       },
     }),
     presetIcons({
-      warn: true,
       collections: {
         ...customIconCollection,
       },
+      scale: 1.2,
+      cdn: 'https://esm.sh/',
     }),
   ],
 });
@@ -253,7 +253,7 @@ export default defineConfig({
  *
  * Example:
  *
- * ```
+ * ```json
  * {
  *   '1': '#FFFFFF03',
  *   '2': '#FFFFFF05',
