@@ -6,14 +6,13 @@
   "sideEffects": false,
   "type": "module",
   "scripts": {
-    "build": "remix vite:build && (if exist dist rmdir /s /q dist) && move build\\client dist",
-    "build:local": "remix vite:build && (if exist dist rmdir /s /q dist) && move build\\client dist",
+    "build": "remix vite:build",
     "dev": "remix vite:dev",
+    "start": "netlify serve",
     "test": "vitest --run",
     "test:watch": "vitest",
     "lint": "eslint --cache --cache-location ./node_modules/.cache/eslint .",
     "lint:fix": "npm run lint -- --fix",
-    "start": "netlify dev",
     "typecheck": "tsc",
     "preview": "pnpm run build && pnpm run start"
   },
@@ -85,21 +84,6 @@
     "@types/react-dom": "^18.2.7",
     "fast-glob": "^3.3.2",
     "is-ci": "^3.0.1",
-    "netlify-cli": "^17.38.1",
-    "node-fetch": "^3.3.2",
-    "prettier": "^3.3.2",
-    "typescript": "^5.5.2",
-    "unified": "^11.0.5",
-    "unocss": "^0.61.3",
-    "vite": "^5.3.1",
-    "vite-plugin-node-polyfills": "^0.22.0",
-    "vite-plugin-optimize-css-modules": "^1.1.0",
-    "vite-tsconfig-paths": "^4.3.2",
-    "vitest": "^2.0.1",
-    "wrangler": "^3.63.2",
-    "zod": "^3.23.8"
-  },
-  "resolutions": {
-    "@typescript-eslint/utils": "^8.0.0-alpha.30"
-  }
-}
+    "netlify-cli": "^
+::contentReference[oaicite:2]{index=2}
+ 
