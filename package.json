@@ -1,13 +1,12 @@
 {
-  "name": "bolt",
-  "description": "StackBlitz AI Agent",
+  "name": "appdragon",
+  "description": "AI Agent",
   "private": true,
-  "license": "MIT",
   "packageManager": "pnpm@9.4.0",
   "sideEffects": false,
   "type": "module",
   "scripts": {
-    "build": "remix vite:build && rm -rf dist && mv build/client dist",
+    "build": "remix vite:build && (if exist dist rmdir /s /q dist) && move build\\client dist",
     "build:local": "remix vite:build && (if exist dist rmdir /s /q dist) && move build\\client dist",
     "dev": "remix vite:dev",
     "test": "vitest --run",
