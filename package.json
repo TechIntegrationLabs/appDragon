@@ -7,7 +7,7 @@
   "sideEffects": false,
   "type": "module",
   "scripts": {
-    "build": "remix vite:build",
+    "build": "remix vite:build && xcopy /E /I /Y build\\client public",
     "dev": "remix vite:dev",
     "test": "vitest --run",
     "test:watch": "vitest",
