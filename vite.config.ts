@@ -14,10 +14,11 @@ export default defineConfig({
     }),
     tsconfigPaths(),
     nodePolyfills({
-      include: ['path', 'process', 'node:path'],
+      include: ['path', 'process'],
       globals: {
         process: true,
       },
+      protocolImports: true,
     }),
     optimizeCssModules(),
     UnoCSS(),
@@ -60,5 +61,10 @@ export default defineConfig({
         global: 'globalThis',
       },
     },
+  },
+  ssr: {
+    target: 'node',
+    format: 'esm',
+    noExternal: true,
   },
 });

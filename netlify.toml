@@ -1,6 +1,7 @@
 [build]
-  command = "remix vite:build"
+  command = "pnpm run build"
   publish = "build/client"
+  functions = "functions"
 
 [dev]
   command = "pnpm run dev"
@@ -8,6 +9,7 @@
 
 [functions]
   directory = "functions"
+  node_bundler = "esbuild"
 
 [[redirects]]
   from = "/*"
