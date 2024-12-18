@@ -9,7 +9,7 @@ import { ActivityLog } from '~/components/multiagent/ActivityLog';
 import { Alert } from '~/components/ui/Alert';
 import { Spinner } from '~/components/ui/Spinner';
 
-export const loader: LoaderFunction = async ({ request }) => {
+export const loader: LoaderFunction = async () => {
   return json({ id: undefined });
 };
 
@@ -18,47 +18,92 @@ interface ErrorState {
   type: 'error' | 'warning' | 'info';
 }
 
+interface Activity {
+  agent: string;
+  action: string;
+  timestamp: number;
+}
+
+interface MultiAgentResult {
+  plan: string | null;
+  codeChanges: string | null;
+  testResults: string | null;
+  status: 'success' | 'partial' | 'error';
+  error?: string;
+  completedSteps: string[];
+}
+
 export default function Index() {
   const [userRequest, setUserRequest] = useState('');
-  const [result, setResult] = useState(null);
+  const [result, setResult] = useState<MultiAgentResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [showMultiAgent, setShowMultiAgent] = useState(false);
-  const [activities, setActivities] = useState([]);
+  const [activities, setActivities] = useState<Activity[]>([]);
   const [error, setError] = useState<ErrorState | null>(null);
 
-  const parseErrorMessage = (error: any): ErrorState => {
-    if (error?.status === 'partial') {
+  const parseErrorMessage = (error: unknown): ErrorState => {
+    if (typeof error === 'object' && error !== null && 'status' in error && error.status === 'partial') {
       return {
-        message: error.error || 'Some steps completed successfully, but others failed.',
-        type: 'warning'
+        message: (error as { error?: string }).error || 'Some steps completed successfully, but others failed.',
+        type: 'warning',
       };
     }
-    if (typeof error === 'string' && error.includes('overloaded')) {
+
+    if (typeof error === 'string') {
+      if (error.includes('overloaded')) {
+        return {
+          message: 'The service is experiencing high load. We will automatically retry your request.',
+          type: 'warning',
+        };
+      }
+      if (error.includes('Invalid API key')) {
+        return {
+          message: 'There is an issue with the API configuration. Please contact support.',
+          type: 'error',
+        };
+      }
+      // Show the actual error message if it's a string
       return {
-        message: 'The service is experiencing high load. We will automatically retry your request.',
-        type: 'warning'
-      };
-    } else if (error?.message?.includes('429') || error?.message?.includes('529')) {
-      return {
-        message: 'The service is temporarily unavailable. Please try again in a few moments.',
-        type: 'warning'
+        message: error,
+        type: 'error',
       };
     }
+
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'message' in error &&
+      typeof error.message === 'string'
+    ) {
+      const msg = error.message;
+      if (msg.includes('429') || msg.includes('529')) {
+        return {
+          message: 'The service is temporarily unavailable. Please try again in a few moments.',
+          type: 'warning',
+        };
+      }
+      // Show the actual error message from the object
+      return {
+        message: msg,
+        type: 'error',
+      };
+    }
+
     return {
       message: 'An unexpected error occurred. Please try again.',
-      type: 'error'
+      type: 'error',
     };
   };
 
-  async function handleMultiAgentSubmit(e) {
+  async function handleMultiAgentSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
     setResult(null);
-    
-    // Add initial activity
-    addActivity('Orchestrator', 'Starting multi-agent workflow');
-    addActivity('Planner', 'Analyzing user request: ' + userRequest);
+
+    // add initial activity
+    addActivity('orchestrator', 'starting multi-agent workflow');
+    addActivity('planner', 'analyzing user request: ' + userRequest);
 
     const formData = new FormData();
     formData.append('userRequest', userRequest);
@@ -71,6 +116,7 @@ export default function Index() {
 
       const responseText = await res.text();
       let data;
+
       try {
         data = JSON.parse(responseText);
       } catch {
@@ -80,49 +126,55 @@ export default function Index() {
       if (data.error) {
         const errorState = parseErrorMessage(data);
         setError(errorState);
-        addActivity('System', errorState.message);
-        
-        // For partial successes, still show the results
+        addActivity('system', errorState.message);
+
+        // for partial successes, still show the results
         if (data.status === 'partial') {
           setResult(data);
-          data.completedSteps.forEach(step => {
-            switch(step) {
-              case 'planning':
-                addActivity('Planner', 'Generated execution plan');
+          data.completedSteps.forEach((step: string) => {
+            switch (step) {
+              case 'planning': {
+                addActivity('planner', 'generated execution plan');
                 break;
-              case 'coding':
-                addActivity('Coder', 'Generated code changes');
+              }
+              case 'coding': {
+                addActivity('coder', 'generated code changes');
                 break;
-              case 'testing':
-                addActivity('Tester', 'Completed testing');
+              }
+              case 'testing': {
+                addActivity('tester', 'completed testing');
                 break;
+              }
             }
           });
         }
       } else {
         setResult(data);
-        addActivity('Planner', 'Generated execution plan');
-        addActivity('Coder', 'Implemented code changes');
-        addActivity('Tester', 'Verified changes');
+        addActivity('planner', 'generated execution plan');
+        addActivity('coder', 'implemented code changes');
+        addActivity('tester', 'verified changes');
       }
     } catch (error) {
       const errorState = parseErrorMessage(error);
       setError(errorState);
-      addActivity('System', 'Failed to process request: ' + errorState.message);
+      addActivity('system', 'failed to process request: ' + errorState.message);
     } finally {
       setLoading(false);
     }
   }
 
-  function addActivity(agent, action) {
-    setActivities(prev => [...prev, {
-      agent,
-      action,
-      timestamp: Date.now()
-    }]);
+  function addActivity(agent: string, action: string) {
+    setActivities((prev) => [
+      ...prev,
+      {
+        agent,
+        action,
+        timestamp: Date.now(),
+      },
+    ]);
   }
 
-  // Clear states when closing the panel
+  // clear states when closing the panel
   useEffect(() => {
     if (!showMultiAgent) {
       setActivities([]);
@@ -135,8 +187,8 @@ export default function Index() {
   return (
     <div className="flex flex-col h-full w-full">
       <Header />
-      
-      {/* Multi-agent toggle button */}
+
+      {/* multi-agent toggle button */}
       <div className="flex justify-end p-2 border-b border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 relative z-50">
         <button
           onClick={() => setShowMultiAgent(!showMultiAgent)}
@@ -148,7 +200,7 @@ export default function Index() {
         </button>
       </div>
 
-      {/* Multi-agent panel */}
+      {/* multi-agent panel */}
       {showMultiAgent && (
         <div className="border-b border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 relative z-40">
           <div className="flex">
@@ -191,37 +243,39 @@ export default function Index() {
                       {result.plan && (
                         <div>
                           <h2 className="text-sm font-semibold text-bolt-elements-textSecondary mb-2">Plan</h2>
-                          <pre className="text-xs whitespace-pre-wrap text-bolt-elements-textPrimary overflow-x-auto max-h-[400px] overflow-y-auto p-2 bg-bolt-elements-background-depth-3 rounded">{result.plan}</pre>
+                          <pre className="text-xs whitespace-pre-wrap text-bolt-elements-textPrimary overflow-x-auto max-h-[400px] overflow-y-auto p-2 bg-bolt-elements-background-depth-3 rounded">
+                            {result.plan}
+                          </pre>
                         </div>
                       )}
                       {result.codeChanges && (
                         <div>
                           <h2 className="text-sm font-semibold text-bolt-elements-textSecondary mb-2">Code Changes</h2>
-                          <pre className="text-xs whitespace-pre-wrap text-bolt-elements-textPrimary overflow-x-auto max-h-[400px] overflow-y-auto p-2 bg-bolt-elements-background-depth-3 rounded">{result.codeChanges}</pre>
+                          <pre className="text-xs whitespace-pre-wrap text-bolt-elements-textPrimary overflow-x-auto max-h-[400px] overflow-y-auto p-2 bg-bolt-elements-background-depth-3 rounded">
+                            {result.codeChanges}
+                          </pre>
                         </div>
                       )}
                       {result.testResults && (
                         <div>
                           <h2 className="text-sm font-semibold text-bolt-elements-textSecondary mb-2">Test Results</h2>
-                          <pre className="text-xs whitespace-pre-wrap text-bolt-elements-textPrimary overflow-x-auto max-h-[400px] overflow-y-auto p-2 bg-bolt-elements-background-depth-3 rounded">{result.testResults}</pre>
+                          <pre className="text-xs whitespace-pre-wrap text-bolt-elements-textPrimary overflow-x-auto max-h-[400px] overflow-y-auto p-2 bg-bolt-elements-background-depth-3 rounded">
+                            {result.testResults}
+                          </pre>
                         </div>
                       )}
                     </div>
                   </div>
                 )}
+
+                <ActivityLog activities={activities} />
               </div>
-            </div>
-            
-            {/* Activity Log */}
-            <div className="w-80 border-l border-bolt-elements-borderColor">
-              <ActivityLog activities={activities} />
             </div>
           </div>
         </div>
       )}
 
-      {/* Main chat area */}
-      <div className="flex-1 overflow-hidden relative z-30">
+      <div className="flex-1 overflow-hidden">
         <ClientOnly fallback={<BaseChat />}>{() => <Chat />}</ClientOnly>
       </div>
     </div>

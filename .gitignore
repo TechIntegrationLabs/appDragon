@@ -28,3 +28,6 @@ dist-ssr
 *.vars
 .wrangler
 _worker.bundle
+
+# Local Netlify folder
+.netlify

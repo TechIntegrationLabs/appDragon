@@ -1,7 +1,10 @@
 // app/agents/orchestrator.server.ts
 import { anthropicStream } from '~/utils/anthropic-stream';
 import { plannerPrompt, coderPrompt, testerPrompt } from './prompts';
-import { getAllFiles, writeFile } from '~/utils/webcontainer';
+import { getAllFilesWithContent, writeFile } from '~/utils/webcontainer';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('MultiAgent');
 
 interface OrchestrationResult {
   plan: string | null;
@@ -12,64 +15,66 @@ interface OrchestrationResult {
   completedSteps: string[];
 }
 
-// Parse code changes from coder's response
-function parseFileChanges(response: string): { path: string, content: string }[] {
-  const updates: {path: string, content: string}[] = [];
+// parse code changes from coder's response
+function parseFileChanges(response: string): { path: string; content: string }[] {
+  const updates: { path: string; content: string }[] = [];
 
-  // Split by FILE: sections
+  // split by file sections
   const fileSections = response.split(/\bFILE:\s+/).slice(1);
-  
+
   for (const section of fileSections) {
     try {
       const lines = section.trim().split('\n');
       const filePath = lines[0].trim();
-      
-      // Find code block markers
-      const codeStart = lines.findIndex(line => line.trim().startsWith('```'));
+
+      // find code block markers
+      const codeStart = lines.findIndex((line) => line.trim().startsWith('```'));
       const codeEnd = lines.findIndex((line, i) => i > codeStart && line.trim().startsWith('```'));
-      
+
       if (codeStart !== -1 && codeEnd !== -1) {
-        // Extract content between markers, removing the language identifier
+        // extract content between markers, removing language identifier
         const content = lines
           .slice(codeStart + 1, codeEnd)
           .join('\n')
           .replace(/^```\w*\n/, '');
-        
+
         updates.push({ path: filePath, content });
       }
     } catch (error) {
-      console.error('Error parsing file section:', error);
-      // Continue parsing other sections
+      console.error('error parsing file section:', error);
+      // continue parsing other sections
     }
   }
 
   return updates;
 }
 
-// Format current files for the prompt
+// format current files for the prompt
 function formatCurrentFiles(files: Record<string, string>): string {
   return Object.entries(files)
-    .map(([path, content]) => `FILE: ${path}\n\`\`\`\n${content}\n\`\`\``)
+    .map(([path, content]) => `FILE: ${path}\n${content}`)
     .join('\n\n');
 }
 
-// Helper to call Anthropic with a given prompt
+// helper to call anthropic with retry logic
 async function callAnthropic(prompt: string, retryCount = 0): Promise<string> {
   try {
     const response = await anthropicStream({
       prompt,
       max_tokens_to_sample: 2000,
-      model: "claude-2",
+      model: 'claude-2',
       temperature: 0,
     });
 
-    return response.trim();
+    return response;
   } catch (error: any) {
     if (error.message.includes('overloaded') && retryCount < 2) {
-      console.log(`Retrying step (attempt ${retryCount + 1})...`);
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      console.log(`retrying step (attempt ${retryCount + 1})...`);
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+
       return callAnthropic(prompt, retryCount + 1);
     }
+
     throw error;
   }
 }
@@ -80,62 +85,55 @@ export async function runMultiAgentFlow(userRequest: string): Promise<Orchestrat
     codeChanges: null,
     testResults: null,
     status: 'error',
-    completedSteps: []
+    completedSteps: [],
   };
 
   try {
-    // 1. Planner
-    console.log('Running planner...');
-    const planPromptText = plannerPrompt(userRequest);
-    result.plan = await callAnthropic(planPromptText);
-    result.completedSteps.push('planning');
-
-    // 2. Coder
-    // Get current codebase state
-    console.log('Fetching current code...');
-    const currentFiles = await getAllFiles();
+    logger.info('Starting multi-agent workflow for request:', userRequest);
+    
+    // get current codebase
+    const currentFiles = await getAllFilesWithContent();
     const currentCode = formatCurrentFiles(currentFiles);
+    logger.debug('Retrieved current codebase files');
 
-    console.log('Running coder...');
+    // step 1: planning
+    logger.info('Starting planning phase...');
+    const plannerPromptText = plannerPrompt(userRequest);
+    result.plan = await callAnthropic(plannerPromptText);
+    result.completedSteps.push('planning');
+    logger.info('Planning phase completed');
+
+    // step 2: coding
+    logger.info('Starting coding phase...');
     const coderPromptText = coderPrompt(userRequest, result.plan, currentCode);
     result.codeChanges = await callAnthropic(coderPromptText);
     result.completedSteps.push('coding');
+    logger.info('Coding phase completed');
 
-    // Apply code changes
-    console.log('Applying code changes...');
+    // apply code changes
     const updates = parseFileChanges(result.codeChanges);
-    for (const {path, content} of updates) {
+    logger.debug('Parsed code changes:', { numUpdates: updates.length });
+
+    for (const { path, content } of updates) {
       await writeFile(path, content);
+      logger.debug('Applied changes to file:', path);
     }
 
-    // 3. Tester
-    console.log('Running tester...');
-    // Get updated codebase state
-    const updatedFiles = await getAllFiles();
+    // step 3: testing
+    logger.info('Starting testing phase...');
+    const updatedFiles = await getAllFilesWithContent();
     const updatedCode = formatCurrentFiles(updatedFiles);
-
-    const testerPromptText = testerPrompt(userRequest, result.plan, result.codeChanges);
+    const testerPromptText = testerPrompt(userRequest, result.plan, updatedCode);
     result.testResults = await callAnthropic(testerPromptText);
     result.completedSteps.push('testing');
+    logger.info('Testing phase completed');
 
-    // All steps completed successfully
     result.status = 'success';
-  } catch (error: any) {
-    console.error('Error in multi-agent flow:', error);
-    
-    // Set status based on how far we got
+    logger.info('Multi-agent workflow completed successfully');
+  } catch (error) {
+    logger.error('Error in multi-agent workflow:', error);
+    result.error = error instanceof Error ? error.message : 'Unknown error';
     result.status = result.completedSteps.length > 0 ? 'partial' : 'error';
-    result.error = error.message;
-
-    // If we have a partial success, provide helpful context
-    if (result.status === 'partial') {
-      const lastStep = result.completedSteps[result.completedSteps.length - 1];
-      if (lastStep === 'planning') {
-        result.error = 'Generated plan but encountered an error during code generation. You can try again or implement the plan manually.';
-      } else if (lastStep === 'coding') {
-        result.error = 'Generated code changes but encountered an error during testing. You may want to review the changes carefully before implementing.';
-      }
-    }
   }
 
   return result;
