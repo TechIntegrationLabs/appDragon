@@ -7,7 +7,8 @@
   "sideEffects": false,
   "type": "module",
   "scripts": {
-    "build": "remix vite:build && xcopy /E /I /Y build\\client public",
+    "build": "remix vite:build && rm -rf public && mv build/client public",
+    "build:local": "remix vite:build && (if exist public rmdir /s /q public) && move build\\client public",
     "dev": "remix vite:dev",
     "test": "vitest --run",
     "test:watch": "vitest",

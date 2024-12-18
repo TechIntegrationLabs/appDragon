@@ -13,13 +13,16 @@ export default async function handleRequest(
   remixContext: EntryContext,
   _loadContext: AppLoadContext,
 ) {
-  const readable = await ReactDOMServer.renderToReadableStream(<RemixServer context={remixContext} url={request.url} />, {
-    signal: request.signal,
-    onError(error: unknown) {
-      console.error(error);
-      responseStatusCode = 500;
+  const readable = await ReactDOMServer.renderToReadableStream(
+    <RemixServer context={remixContext} url={request.url} />,
+    {
+      signal: request.signal,
+      onError(error: unknown) {
+        console.error(error);
+        responseStatusCode = 500;
+      },
     },
-  });
+  );
 
   const body = new ReadableStream({
     start(controller) {
