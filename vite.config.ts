@@ -14,7 +14,7 @@ export default defineConfig({
     }),
     tsconfigPaths(),
     nodePolyfills({
-      include: ['process'],
+      include: ['path', 'process', 'node:path'],
       globals: {
         process: true,
       },
@@ -28,18 +28,36 @@ export default defineConfig({
   build: {
     target: 'esnext',
     outDir: 'dist',
-    chunkSizeWarningLimit: 1000,
+    chunkSizeWarningLimit: 2000,
     rollupOptions: {
       output: {
         format: 'esm',
         manualChunks(id) {
           if (id.includes('node_modules')) {
-            if (id.includes('react/') || id.includes('react-dom/')) {
-              return;
+            if (id.includes('@remix-run/')) {
+              return 'remix';
+            }
+            if (id.includes('react') || id.includes('react-dom')) {
+              return 'react';
+            }
+            if (id.includes('@codemirror/')) {
+              return 'codemirror';
             }
             return 'vendor';
           }
         },
+      },
+    },
+  },
+  resolve: {
+    alias: {
+      path: 'path-browserify',
+    },
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      define: {
+        global: 'globalThis',
       },
     },
   },
